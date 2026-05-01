@@ -54,14 +54,14 @@ export function useDownloadManager() {
 
         const reader = res.body?.getReader();
         const contentLength = parseInt(res.headers.get('content-length') ?? '0', 10);
-        const chunks: Uint8Array[] = [];
+        const chunks: ArrayBuffer[] = [];
         let loaded = 0;
 
         if (reader) {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            chunks.push(value);
+            chunks.push(value.buffer as ArrayBuffer);
             loaded += value.byteLength;
             const progress = contentLength > 0 ? Math.round((loaded / contentLength) * 100) : -1;
             updateJob(id, { progress });
