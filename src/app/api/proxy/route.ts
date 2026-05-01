@@ -7,10 +7,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateProxyUrl } from '@/lib/url-utils';
 import { buildSpoofedHeaders } from '@/lib/ua-profiles';
 
-const STRIP_REQUEST_HEADERS = new Set([
+const STRIP_REQUEST_HEADERS = [
   'cookie', 'authorization', 'x-forwarded-for', 'x-real-ip',
   'x-forwarded-host', 'x-forwarded-proto', 'via', 'origin',
-]);
+];
 
 const STRIP_RESPONSE_HEADERS = new Set([
   'set-cookie', 'x-frame-options', 'content-security-policy',
