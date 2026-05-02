@@ -9,7 +9,7 @@ import { MediaSnifferPanel } from '@/components/download/MediaSnifferPanel';
 import { useTheme } from '@/hooks/useTheme';
 import { useDownloadManager } from '@/hooks/useDownloadManager';
 import { normalizeUrl } from '@/lib/url-utils';
-import { UA_PROFILES, DEFAULT_PROFILE_KEY } from '@/lib/ua-profiles';
+import { UA_PROFILES, getSessionUA, rotateUA } from '@/lib/ua-profiles';
 import type { SniffResult } from '@/types';
 
 function generateSessionId() {
@@ -24,14 +24,19 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [incognito, setIncognito] = useState(true);
   const [proxyEnabled, setProxyEnabled] = useState(true);
-  const [uaKey] = useState(DEFAULT_PROFILE_KEY);
+  const [uaKey, setUaKey] = useState('Firefox/Linux');
   const [sessionId] = useState(generateSessionId);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [sniffLoading, setSniffLoading] = useState(false);
   const [sniffResult, setSniffResult] = useState<SniffResult | null>(null);
   const [sniffOpen, setSniffOpen] = useState(false);
 
   const frameRef = useRef<BrowserFrameHandle>(null);
+
+  useEffect(() => {
+    setUaKey(getSessionUA());
+  }, []);
 
   const navigate = useCallback(
     (rawUrl: string) => {
@@ -40,16 +45,23 @@ export default function Home() {
       setCurrentUrl(url);
       setSniffOpen(false);
       setSniffResult(null);
+      setSidebarOpen(false);
 
-      const target = proxyEnabled ? `/api/proxy?url=${encodeURIComponent(url)}&ua=${encodeURIComponent(uaKey)}` : url;
+      const nextUA = rotateUA();
+      setUaKey(nextUA);
+
+      const target = proxyEnabled
+        ? `/api/proxy?url=${encodeURIComponent(url)}&ua=${encodeURIComponent(nextUA)}`
+        : url;
       frameRef.current?.loadUrl(target);
     },
-    [proxyEnabled, uaKey]
+    [proxyEnabled]
   );
 
   const handleSniff = useCallback(async () => {
     if (!currentUrl) return;
     setSniffOpen(true);
+    setSidebarOpen(false);
     setSniffLoading(true);
     setSniffResult(null);
     try {
@@ -60,14 +72,13 @@ export default function Home() {
       });
       const data: SniffResult = await res.json();
       setSniffResult(data);
-    } catch (err) {
+    } catch {
       setSniffResult({ ok: false, assets: [], pageTitle: '', error: 'Sniff request failed' });
     } finally {
       setSniffLoading(false);
     }
   }, [currentUrl, uaKey]);
 
-  // Session reset when incognito is toggled
   const handleToggleIncognito = useCallback(() => {
     setIncognito((v) => !v);
     setCurrentUrl('');
@@ -77,16 +88,18 @@ export default function Home() {
   const spoofedUA = UA_PROFILES[uaKey]?.['User-Agent'] ?? 'Unknown';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', position: 'relative', zIndex: 1 }}>
-      {/* Top toolbar */}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden', position: 'relative', zIndex: 1 }}>
       <Toolbar
         mode={mode}
         onToggleMode={toggleMode}
         incognito={incognito}
         sessionId={sessionId}
+        uaKey={uaKey}
+        onToggleSidebar={() => setSidebarOpen(v => !v)}
+        sidebarOpen={sidebarOpen}
+        jobCount={jobs.filter(j => j.status === 'downloading' || j.status === 'scanning').length}
       />
 
-      {/* Address bar */}
       <AddressBar
         currentUrl={currentUrl}
         loading={loading}
@@ -95,23 +108,14 @@ export default function Home() {
         onStop={() => { frameRef.current?.stop(); setLoading(false); }}
       />
 
-      {/* Main content area */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
-
-        {/* Browser frame area */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
-          {/* Empty state */}
-          {!currentUrl && (
-            <EmptyState onNavigate={navigate} />
-          )}
-
+          {!currentUrl && <EmptyState onNavigate={navigate} />}
           <BrowserFrame
             ref={frameRef}
             onLoadStart={() => setLoading(true)}
             onLoadEnd={() => setLoading(false)}
           />
-
-          {/* Media sniffer panel */}
           {sniffOpen && (
             <MediaSnifferPanel
               result={sniffResult}
@@ -122,23 +126,44 @@ export default function Home() {
           )}
         </div>
 
-        {/* Sidebar */}
-        <Sidebar
-          jobs={jobs}
-          onRemove={removeJob}
-          onClearCompleted={clearCompleted}
-          incognito={incognito}
-          onToggleIncognito={handleToggleIncognito}
-          spoofedUA={spoofedUA}
-          proxyEnabled={proxyEnabled}
-          onToggleProxy={() => setProxyEnabled((v) => !v)}
-        />
+        {/* Mobile sidebar overlay */}
+        {sidebarOpen && (
+          <div
+            style={{ position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.6)' }}
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+        <div style={{
+          position: 'absolute',
+          top: 0, right: 0, bottom: 0,
+          width: 'min(300px, 92vw)',
+          zIndex: 41,
+          transform: sidebarOpen ? 'translateX(0)' : 'translateX(100%)',
+          transition: 'transform 0.25s ease',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          <Sidebar
+            jobs={jobs}
+            onRemove={removeJob}
+            onClearCompleted={clearCompleted}
+            incognito={incognito}
+            onToggleIncognito={handleToggleIncognito}
+            spoofedUA={spoofedUA}
+            uaKey={uaKey}
+            proxyEnabled={proxyEnabled}
+            onToggleProxy={() => setProxyEnabled((v) => !v)}
+            onClose={() => setSidebarOpen(false)}
+          />
+        </div>
       </div>
     </div>
   );
 }
 
 function EmptyState({ onNavigate }: { onNavigate: (url: string) => void }) {
+  const [query, setQuery] = useState('');
+
   const quickLinks = [
     { label: 'DuckDuckGo', url: 'https://duckduckgo.com' },
     { label: 'Wikipedia', url: 'https://en.wikipedia.org' },
@@ -148,63 +173,62 @@ function EmptyState({ onNavigate }: { onNavigate: (url: string) => void }) {
 
   return (
     <div style={{
-      position: 'absolute',
-      inset: 0,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 5,
+      position: 'absolute', inset: 0, zIndex: 5,
       background: 'var(--bg)',
-      gap: 32,
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      padding: '24px 16px', gap: 24, overflowY: 'auto',
     }}>
-      {/* Logo mark */}
       <div style={{ textAlign: 'center' }}>
         <div style={{
-          width: 72, height: 72, borderRadius: 16,
+          width: 64, height: 64, borderRadius: 14,
           background: 'var(--accent)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 36, fontWeight: 900,
-          fontFamily: 'var(--font-display)',
-          color: '#000',
-          margin: '0 auto 16px',
-          boxShadow: '0 0 32px var(--accent-glow)',
+          fontSize: 32, fontWeight: 900,
+          fontFamily: 'var(--font-display)', color: '#000',
+          margin: '0 auto 12px',
+          boxShadow: '0 0 28px var(--accent-glow)',
         }}>Y</div>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text-primary)' }}>
-          YSPB
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text-primary)' }}>YSPB</div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 3 }}>YOUR SECURITY & PRIVACY BROWSER</div>
+      </div>
+
+      <div style={{ width: '100%', maxWidth: 500 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            className="yspb-input"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && query.trim() && onNavigate(query.trim())}
+            placeholder="Search or enter a URL…"
+            autoFocus
+            style={{ fontSize: 15, padding: '12px 14px' }}
+          />
+          <button
+            className="btn-primary"
+            onClick={() => query.trim() && onNavigate(query.trim())}
+            style={{ fontSize: 14, padding: '0 22px', flexShrink: 0 }}
+          >
+            GO
+          </button>
         </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
-          YOUR SECURITY & PRIVACY BROWSER
-        </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>
-          by MNM YOUNUS · AGPL-3.0
+        <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 6, textAlign: 'center' }}>
+          Searches DuckDuckGo · or type a full URL to navigate
         </div>
       </div>
 
-      {/* Feature pills */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', maxWidth: 480 }}>
-        {[
-          '🛡 Anti-Fingerprinting',
-          '🕶 Incognito by Default',
-          '📡 Media Sniffer',
-          '🔬 Malware Shield',
-          '🔒 Header Spoofing',
-          '↓ 1DM-Style Downloads',
-        ].map((f) => (
-          <span key={f} className="badge badge-unknown" style={{ fontSize: 11, padding: '4px 10px' }}>{f}</span>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+        {quickLinks.map((l) => (
+          <button key={l.url} className="btn-ghost" onClick={() => onNavigate(l.url)} style={{ fontSize: 12 }}>
+            {l.label}
+          </button>
         ))}
       </div>
 
-      {/* Quick links */}
-      <div>
-        <div style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>QUICK NAVIGATE</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {quickLinks.map((l) => (
-            <button key={l.url} className="btn-ghost" onClick={() => onNavigate(l.url)} style={{ fontSize: 12 }}>
-              {l.label}
-            </button>
-          ))}
-        </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', maxWidth: 380 }}>
+        {['🛡 Anti-Fingerprint', '🔄 Random UA', '📡 Media Sniffer', '🔬 Malware Shield'].map(f => (
+          <span key={f} className="badge badge-unknown" style={{ fontSize: 10, padding: '3px 8px' }}>{f}</span>
+        ))}
       </div>
     </div>
   );
