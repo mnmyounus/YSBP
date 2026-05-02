@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useImperativeHandle, forwardRef } from 'react';
+import { useRef, useImperativeHandle, forwardRef, useState } from 'react';
 
 export interface BrowserFrameHandle {
   loadUrl: (proxyUrl: string) => void;
@@ -14,43 +14,36 @@ interface Props {
 export const BrowserFrame = forwardRef<BrowserFrameHandle, Props>(
   ({ onLoadStart, onLoadEnd }, ref) => {
     const iframeRef = useRef<HTMLIFrameElement>(null);
+    // key forces React to remount the iframe, guaranteeing a real navigation
+    const [frameKey, setFrameKey] = useState(0);
+    const [src, setSrc] = useState('about:blank');
 
     useImperativeHandle(ref, () => ({
       loadUrl(proxyUrl: string) {
-        if (!iframeRef.current) return;
         onLoadStart?.();
-        iframeRef.current.src = proxyUrl;
+        setSrc(proxyUrl);
+        // Increment key to force remount — this is the fix for "page not showing"
+        setFrameKey(k => k + 1);
       },
       stop() {
-        if (!iframeRef.current) return;
-        // Temporarily clear src to stop loading
-        const src = iframeRef.current.src;
-        iframeRef.current.src = 'about:blank';
-        void src; // preserve for potential restore
+        setSrc('about:blank');
+        setFrameKey(k => k + 1);
+        onLoadEnd?.();
       },
     }));
 
     return (
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#fff' }}>
         <iframe
+          key={frameKey}
           ref={iframeRef}
           id="browser-frame"
-          src="about:blank"
-          sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
+          src={src}
+          sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"
           referrerPolicy="no-referrer"
           title="YSPB Sandboxed Browser"
           onLoad={onLoadEnd}
-          style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }}
-        />
-        {/* Overlay to intercept clicks when needed */}
-        <div
-          id="frame-overlay"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'none',
-            cursor: 'not-allowed',
-          }}
+          style={{ width: '100%', height: '100%', border: 'none', background: '#fff', display: 'block' }}
         />
       </div>
     );
