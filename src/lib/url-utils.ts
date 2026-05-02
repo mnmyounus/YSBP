@@ -20,14 +20,10 @@ export function normalizeUrl(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return '';
 
-  // If it looks like a bare domain or search query
   if (!trimmed.includes('://')) {
-    // Check if it looks like a domain
-    if (/^[a-zA-Z0-9-]+(\.[a-zA-Z]{2,})+/.test(trimmed)) {
-      return `https://${trimmed}`;
-    }
-    // Treat as DuckDuckGo search
-    return `https://duckduckgo.com/?q=${encodeURIComponent(trimmed)}`;
+    const domainLike = /^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(:[0-9]+)?(\/.*)?$/.test(trimmed);
+    if (domainLike) return `https://${trimmed}`;
+    return `https://duckduckgo.com/?q=${encodeURIComponent(trimmed)}&ia=web`;
   }
 
   return trimmed;
