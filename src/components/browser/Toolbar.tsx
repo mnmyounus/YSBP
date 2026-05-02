@@ -6,65 +6,91 @@ interface Props {
   onToggleMode: () => void;
   incognito: boolean;
   sessionId: string;
+  uaKey: string;
+  onToggleSidebar: () => void;
+  sidebarOpen: boolean;
+  jobCount: number;
 }
 
-export function Toolbar({ mode, onToggleMode, incognito, sessionId }: Props) {
+const UA_ICONS: Record<string, string> = {
+  'Chrome/Windows': '🪟',
+  'Firefox/Linux': '🐧',
+  'Safari/macOS': '🍎',
+  'Googlebot': '🤖',
+  'Mobile/Android': '📱',
+};
+
+export function Toolbar({ mode, onToggleMode, incognito, sessionId, uaKey, onToggleSidebar, sidebarOpen, jobCount }: Props) {
   return (
-    <div
-      style={{
-        height: 44,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '0 14px',
-        borderBottom: '1px solid var(--border)',
-        background: 'var(--panel)',
-        flexShrink: 0,
-        zIndex: 10,
-      }}
-    >
+    <div style={{
+      height: 44,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '0 10px',
+      borderBottom: '1px solid var(--border)',
+      background: 'var(--panel)',
+      flexShrink: 0,
+      zIndex: 10,
+    }}>
       {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <div style={{
-          width: 24, height: 24, borderRadius: 5,
+          width: 26, height: 26, borderRadius: 6,
           background: 'var(--accent)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 12, fontWeight: 900, color: '#000',
-          fontFamily: 'var(--font-display)',
+          fontSize: 13, fontWeight: 900, color: '#000',
+          fontFamily: 'var(--font-display)', flexShrink: 0,
         }}>Y</div>
         <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15, letterSpacing: '0.08em', color: 'var(--text-primary)' }}>
           YSPB
         </span>
-        <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginLeft: -2 }}>v1.0</span>
       </div>
 
-      {/* Incognito indicator */}
+      {/* Incognito badge */}
       {incognito && (
-        <div className="badge badge-clean" style={{ fontSize: 10 }}>
-          🕶 INCOGNITO
-        </div>
+        <span className="badge badge-clean" style={{ fontSize: 9, padding: '2px 6px', flexShrink: 0 }}>
+          🕶 INC
+        </span>
       )}
 
-      {/* Session ID */}
-      <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginLeft: 2 }}>
-        SID:{sessionId}
+      {/* UA indicator */}
+      <span title={`UA: ${uaKey}`} style={{ fontSize: 14, flexShrink: 0 }}>
+        {UA_ICONS[uaKey] ?? '🌐'}
       </span>
 
       <div style={{ flex: 1 }} />
-
-      {/* Lead dev credit */}
-      <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-        by MNM YOUNUS
-      </span>
 
       {/* Theme toggle */}
       <button
         className="btn-ghost"
         onClick={onToggleMode}
-        style={{ fontSize: 11, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 4 }}
-        title="Toggle UI theme"
+        style={{ fontSize: 11, padding: '4px 8px', flexShrink: 0 }}
+        title="Toggle theme"
       >
-        {mode === 'cyber' ? '☀ NORMAL' : '⚡ CYBER'}
+        {mode === 'cyber' ? '☀' : '⚡'}
+      </button>
+
+      {/* Sidebar / Downloads button */}
+      <button
+        className="btn-ghost"
+        onClick={onToggleSidebar}
+        style={{
+          fontSize: 11, padding: '4px 10px', flexShrink: 0,
+          position: 'relative',
+          borderColor: sidebarOpen ? 'var(--accent)' : undefined,
+          color: sidebarOpen ? 'var(--accent)' : undefined,
+        }}
+        title="Downloads & Settings"
+      >
+        ☰
+        {jobCount > 0 && (
+          <span style={{
+            position: 'absolute', top: 2, right: 2,
+            width: 8, height: 8, borderRadius: '50%',
+            background: 'var(--accent)', display: 'block',
+          }} />
+        )}
       </button>
     </div>
   );
