@@ -1,5 +1,25 @@
 import type { HeaderProfile } from '@/types';
 
+const PROFILE_KEYS = ['Chrome/Windows', 'Firefox/Linux', 'Safari/macOS', 'Googlebot', 'Mobile/Android'];
+
+export function getSessionUA(): string {
+  if (typeof window === 'undefined') return 'Firefox/Linux';
+  let ua = sessionStorage.getItem('yspb-ua');
+  if (!ua) {
+    ua = PROFILE_KEYS[Math.floor(Math.random() * PROFILE_KEYS.length)];
+    sessionStorage.setItem('yspb-ua', ua);
+  }
+  return ua;
+}
+
+export function rotateUA(): string {
+  const current = sessionStorage.getItem('yspb-ua') ?? '';
+  const others = PROFILE_KEYS.filter(k => k !== current);
+  const next = others[Math.floor(Math.random() * others.length)];
+  sessionStorage.setItem('yspb-ua', next);
+  return next;
+}
+
 export const UA_PROFILES: Record<string, HeaderProfile> = {
   'Chrome/Windows': {
     'User-Agent':
