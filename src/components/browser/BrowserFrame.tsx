@@ -2,7 +2,7 @@
 import { useRef, useImperativeHandle, forwardRef, useState } from 'react';
 
 export interface BrowserFrameHandle {
-  loadUrl: (proxyUrl: string) => void;
+  loadUrl: (url: string) => void;
   stop: () => void;
 }
 
@@ -14,15 +14,13 @@ interface Props {
 export const BrowserFrame = forwardRef<BrowserFrameHandle, Props>(
   ({ onLoadStart, onLoadEnd }, ref) => {
     const iframeRef = useRef<HTMLIFrameElement>(null);
-    // key forces React to remount the iframe, guaranteeing a real navigation
     const [frameKey, setFrameKey] = useState(0);
     const [src, setSrc] = useState('about:blank');
 
     useImperativeHandle(ref, () => ({
-      loadUrl(proxyUrl: string) {
+      loadUrl(url: string) {
         onLoadStart?.();
-        setSrc(proxyUrl);
-        // Increment key to force remount — this is the fix for "page not showing"
+        setSrc(url);
         setFrameKey(k => k + 1);
       },
       stop() {
@@ -39,11 +37,17 @@ export const BrowserFrame = forwardRef<BrowserFrameHandle, Props>(
           ref={iframeRef}
           id="browser-frame"
           src={src}
-          sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-          referrerPolicy="no-referrer"
-          title="YSPB Sandboxed Browser"
+          title="YSPB Browser"
           onLoad={onLoadEnd}
-          style={{ width: '100%', height: '100%', border: 'none', background: '#fff', display: 'block' }}
+          onError={onLoadEnd}
+          allow="autoplay; fullscreen"
+          style={{
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            background: '#fff',
+            display: 'block',
+          }}
         />
       </div>
     );
