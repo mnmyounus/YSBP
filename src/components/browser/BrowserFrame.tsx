@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useImperativeHandle, forwardRef, useState } from 'react';
+import { useImperativeHandle, forwardRef, useState } from 'react';
 
 export interface BrowserFrameHandle {
   loadUrl: (url: string) => void;
@@ -9,46 +9,73 @@ export interface BrowserFrameHandle {
 interface Props {
   onLoadStart?: () => void;
   onLoadEnd?: () => void;
+  currentUrl?: string;
 }
 
 export const BrowserFrame = forwardRef<BrowserFrameHandle, Props>(
-  ({ onLoadStart, onLoadEnd }, ref) => {
-    const iframeRef = useRef<HTMLIFrameElement>(null);
-    const [frameKey, setFrameKey] = useState(0);
-    const [src, setSrc] = useState('about:blank');
+  ({ onLoadStart, onLoadEnd, currentUrl }, ref) => {
+    const [opened, setOpened] = useState(false);
 
     useImperativeHandle(ref, () => ({
       loadUrl(url: string) {
         onLoadStart?.();
-        setSrc(url);
-        setFrameKey(k => k + 1);
+        // Open in new tab — the only reliable way to view modern sites
+        window.open(url, '_blank', 'noopener');
+        setOpened(true);
+        setTimeout(() => onLoadEnd?.(), 500);
       },
       stop() {
-        setSrc('about:blank');
-        setFrameKey(k => k + 1);
         onLoadEnd?.();
       },
     }));
 
     return (
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#fff' }}>
-        <iframe
-          key={frameKey}
-          ref={iframeRef}
-          id="browser-frame"
-          src={src}
-          title="YSPB Browser"
-          onLoad={onLoadEnd}
-          onError={onLoadEnd}
-          allow="autoplay; fullscreen"
-          style={{
-            width: '100%',
-            height: '100%',
-            border: 'none',
-            background: '#fff',
-            display: 'block',
-          }}
-        />
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--bg)',
+        padding: 24,
+        gap: 20,
+        textAlign: 'center',
+      }}>
+        {currentUrl ? (
+          <>
+            <div style={{ fontSize: 40 }}>🌐</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
+              Page opened in new tab
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-dim)', maxWidth: 340, lineHeight: 1.7 }}>
+              Modern sites block embedding. YSPB opened the page in your browser.
+              <br />Come back here to use <span style={{ color: 'var(--accent)' }}>📡 SNIFF</span> to grab media from it.
+            </div>
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11,
+              color: 'var(--accent)',
+              padding: '6px 12px',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              maxWidth: 360,
+              wordBreak: 'break-all',
+              background: 'var(--accent-dim)',
+            }}>
+              {currentUrl}
+            </div>
+            <button
+              className="btn-primary"
+              onClick={() => window.open(currentUrl, '_blank', 'noopener')}
+              style={{ fontSize: 13 }}
+            >
+              🔗 Reopen Page
+            </button>
+          </>
+        ) : (
+          <div style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+            Enter a URL above to begin
+          </div>
+        )}
       </div>
     );
   }
