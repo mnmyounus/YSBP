@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateProxyUrl, sanitizeFilename } from '@/lib/url-utils';
 
-const HEADER_STRATEGIES = [
+const HEADER_STRATEGIES: Record<string, string>[] = [
   // Strategy 1: Generic browser
   {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
