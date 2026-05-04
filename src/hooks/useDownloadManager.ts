@@ -15,73 +15,76 @@ export function useDownloadManager() {
 
   const addJob = useCallback(async (asset: MediaAsset) => {
     const id = generateId();
-    setJobs(prev => [{
-      id, asset, status: 'scanning', progress: 0, startedAt: Date.now()
-    }, ...prev]);
+    setJobs(prev => [{ id, asset, status: 'scanning', progress: 0, startedAt: Date.now() }, ...prev]);
 
-    // ── Phase 1: Quick heuristic scan (no full download needed) ──
+    // Phase 1: Quick scan (header only, fast)
     try {
       const scanRes = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: asset.url, filename: asset.filename, quickScan: true }),
       });
-      const scanResult: ScanResult = await scanRes.json();
-      updateJob(id, { scanResult });
-
-      if (scanResult.verdict === 'malicious') {
-        updateJob(id, { status: 'blocked' });
-        return;
+      if (scanRes.ok) {
+        const scanResult: ScanResult = await scanRes.json();
+        updateJob(id, { scanResult });
+        if (scanResult.verdict === 'malicious') {
+          updateJob(id, { status: 'blocked' });
+          return;
+        }
       }
     } catch {
-      // Scan unavailable — proceed with unknown verdict
       updateJob(id, {
-        scanResult: { safe: true, score: 0, detections: [], scanEngine: 'Offline', verdict: 'unknown', details: 'Scan service unavailable' }
+        scanResult: { safe: true, score: 0, detections: [], scanEngine: 'Offline', verdict: 'unknown', details: 'Scan unavailable' }
       });
     }
 
-    // ── Phase 2: Streamed download with real-time progress ──
+    // Phase 2: Download via server proxy (avoids CORS)
     updateJob(id, { status: 'downloading', progress: 0 });
 
     try {
-      // Try direct download first (faster), fallback to proxy
-      const directRes = await fetch(asset.url, {
-        headers: { 'Referer': asset.url, 'User-Agent': 'Mozilla/5.0' },
-        signal: AbortSignal.timeout(5_000),
-      }).catch(() => null);
+      const proxyUrl = `/api/download?url=${encodeURIComponent(asset.url)}&filename=${encodeURIComponent(asset.filename)}`;
+      const res = await fetch(proxyUrl);
 
-      const res = (directRes?.ok) ? directRes :
-        await fetch(`/api/proxy?url=${encodeURIComponent(asset.url)}`);
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errText = await res.text().catch(() => `HTTP ${res.status}`);
+        throw new Error(errText.includes('{') ? `HTTP ${res.status}` : errText);
+      }
 
       const contentLength = parseInt(res.headers.get('content-length') ?? '0', 10);
       const reader = res.body?.getReader();
-      if (!reader) throw new Error('No response body');
+      if (!reader) throw new Error('No response stream');
 
-      const chunks: ArrayBuffer[] = [];
+      const chunks: Uint8Array[] = [];
       let loaded = 0;
-      let lastUpdate = Date.now();
+      let lastUIUpdate = 0;
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        chunks.push(value.buffer as ArrayBuffer);
+        chunks.push(value);
         loaded += value.byteLength;
-
-        // Throttle UI updates to every 100ms for performance
         const now = Date.now();
-        if (now - lastUpdate > 100) {
-          const progress = contentLength > 0 ? Math.min(Math.round((loaded / contentLength) * 100), 99) : -1;
-          updateJob(id, { progress });
-          lastUpdate = now;
+        if (now - lastUIUpdate > 80) {
+          const pct = contentLength > 0 ? Math.min(Math.round((loaded / contentLength) * 100), 99) : -1;
+          updateJob(id, { progress: pct });
+          lastUIUpdate = now;
         }
       }
 
-      const blob = new Blob(chunks, { type: asset.mimeType || 'application/octet-stream' });
+      // Build blob from Uint8Array chunks (avoids ArrayBuffer type issues)
+      const totalBytes = chunks.reduce((s, c) => s + c.byteLength, 0);
+      const merged = new Uint8Array(totalBytes);
+      let offset = 0;
+      for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
+
+      const mimeType = res.headers.get('content-type')?.split(';')[0].trim()
+        || asset.mimeType
+        || 'application/octet-stream';
+
+      const blob = new Blob([merged], { type: mimeType });
       updateJob(id, { status: 'completed', progress: 100 });
 
-      // Trigger browser save
+      // Trigger save dialog
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
@@ -89,7 +92,7 @@ export function useDownloadManager() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
 
     } catch (err: unknown) {
       updateJob(id, {
