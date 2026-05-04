@@ -53,8 +53,7 @@ export async function POST(req: NextRequest) {
       }
     } catch { /* HEAD failed — not blocking */ }
 
-    const verdict: ScanResult['verdict'] =
-      score >= 65 ? 'suspicious' : score > 0 ? 'clean' : 'clean';
+    const verdict = (score >= 65 ? 'suspicious' : 'clean') as ScanResult['verdict'];
 
     return NextResponse.json({
       safe: verdict !== 'malicious',
